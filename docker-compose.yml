@@ -1,0 +1,36 @@
+services:
+  app:
+    build: 
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: shoptitans-app
+
+    working_dir: /var/www/html
+
+    volumes:
+      - ./src:/var/www/html
+    
+    command: tail -f /dev/null
+
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:17
+
+    container_name: shoptitans-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_PASSWORD: secret
+      POSTGRES_USER: shoptitans
+      POSTGRES_DB: shoptitans
+
+    ports:
+      - "5432:5432"
+    
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
