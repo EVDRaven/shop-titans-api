@@ -3,11 +3,108 @@
 Bitácora compartida entre Usuario, ChatGPT y Editor IA. Las propuestas no son decisiones aprobadas hasta confirmación explícita.
 
 ## Estado actual
-**Fase:** MVP Blueprints — D-1 `crafting_materials` EJECUTADA Y VALIDADA POR CONTEOS. Hallazgos H-1/H-2/H-3 del importador de componentes implementados.
-**Estado:** 🟠 IMPLEMENTADA — PENDIENTE DE REVISIÓN (H-1/H-2/H-3). `memory_limit=512M` efectivo; `crafting_materials`=186, `blueprint_components`=2,747.
-**Siguiente tarea:** Revisión humana de H-1/H-2/H-3.
+**Fase:** MVP Blueprints — D-1 `crafting_materials` EJECUTADA Y VALIDADA POR CONTEOS. D-3 (elementos/afinidades AZ–BC) **EJECUTADA Y VALIDADA EN POSTGRESQL**.
+**Estado:** 🟢 EJECUTADA Y VALIDADA (D-3). Migraciones D-3 `Ran`; seeders de catálogos ejecutados; `import:blueprints` ejecutado. `blueprints`=1549, `elements`=8, `enchantments`=73, `spirit_affinities`=38, `spirits`=1, `blueprint_elemental_affinities`=911, `blueprint_components`=2747, `crafting_materials`=186. H-1/H-2/H-3 del importador siguen IMPLEMENTADOS — PENDIENTES DE REVISIÓN. `memory_limit=512M` efectivo.
+**Siguiente tarea:** Revisión humana del reporte de ejecución; decisiones pendientes (`Gold`/`All`, mapeo BA↔`enchantments`, API de catálogos).
 
-## Último hito — 2026-10-15 (cierre de hallazgos H-1, H-2, H-3)
+## Último hito — 2026-10-16 (ejecución D-3 en PostgreSQL)
+Ejecución autorizada. **Escrituras realizadas únicamente vía `migrate`, seeders por clase e `import:blueprints`.**
+
+**Migraciones (batch [4]):** `2026_10_16_000001..000005` → `Ran`. Creadas `enchantments`, `spirit_affinities`, `spirits`, `blueprint_elemental_affinities`; eliminada `blueprints.elemental_affinity_id`; re-apuntadas BA/BB/BC.
+
+**Seeders (por clase, EXIT 0):** `ElementSeeder`, `EnchantmentSeeder`, `SpiritAffinitySeeder`, `SpiritSeeder`.
+
+**Importación (`import:blueprints`, EXIT 0):** 1.549 procesadas · 0 insertados · 1.549 actualizados · 0 omitidos.
+
+**Validación (solo lectura):**
+- `blueprints`=1549 (IDs preservados: distinct=1549, min 1, max 1549) · `elements`=8 · `enchantments`=73 (Element 33/Spirit 40) · `spirit_affinities`=38 · `spirits`=1 · `blueprint_elemental_affinities`=911 · `blueprint_components`=2747 · `crafting_materials`=186.
+- No nulos: BA=330 · BB=85 · BC=10; AZ en 802 blueprints (pos1=802, pos2=109 → 109 filas con 2 elementos).
+- AZ por elemento: Dark177 · Earth160 · Light139 · Water118 · Gold103 · Air101 · Fire87 · All26 (Σ=911).
+- BB: 30 elementos, 30/30 tipo `Element`. BC: `Mundra's Spirit`=10.
+- Integridad: 0 huérfanos (AZ/BA/BB/BC), 0 pares duplicados, 0 posiciones duplicadas, 0 blueprints con >2 elementos.
+- Orden AZ preservado (coincide `ordered_az` con `raw_value`; coexisten `Dark, Earth` y `Earth, Dark`).
+
+**Documentación:** `docs/reports/2026-10-16_ejecucion_d3_postgresql.md`.
+
+**Confirmación:** se ejecutaron `migrate`, 4 seeders por clase e `import:blueprints` (autorizados); sin `db:seed` global, sin reparaciones destructivas, sin commit ni push.
+
+**Estado:** EJECUTADA Y VALIDADA.
+
+## Hito anterior — 2026-10-16 (preflight previo a la ejecución en PostgreSQL — D-3)
+Preflight de **solo lectura**. **Sin escrituras en PostgreSQL; sin cambios de código.**
+
+**Contenedores:** `app` y `postgres` `Up`. **PostgreSQL 17.10**; `current_database()`=shoptitans.
+
+**Migraciones:** las 5 de D-3 en `Pending`; históricas `Ran`.
+
+**Estado del esquema:**
+- No existen las tablas nuevas (`enchantments`, `spirit_affinities`, `spirits`, `blueprint_elemental_affinities`).
+- `blueprints` tiene las 4 columnas de afinidad (`bigint`, nullable) con FKs a `elements(id) ON DELETE SET NULL`.
+- Conteos no nulos en `blueprints`: **0/0/0/0** → la guarda de `2026_10_16_000005` **pasa**.
+- Conteos: `blueprints`=1549 · `elements`=**0** · `crafting_materials`=186 · `blueprint_components`=2747.
+- Excel presente en el contenedor: `storage/app/Shop Titans Data Spreadsheet _ c_ v26.9.1 _ v1.0.9.1332.xlsx`.
+
+**Hallazgos:** (1) `elements`=0 obliga a sembrar catálogos **antes** de reimportar; (2) el `db:seed` global ejecuta `User::factory()->create()`, por lo que se recomienda sembrar **por clase**; (3) artefactos untracked en raíz (`.xlsx`, `*.txt`, `*.diff`, `.zip`).
+
+**Resultado:** **LISTO PARA EJECUCIÓN** (con las condiciones anteriores).
+
+**Documentación:** `docs/reports/2026-10-16_preflight_ejecucion_d3.md`.
+
+**Confirmación:** solo consultas de lectura (`git status`, `docker compose ps`, `migrate:status`, `psql SELECT`); sin `migrate`/`db:seed`/importadores; sin commit ni push.
+
+**Estado:** LISTO PARA EJECUCIÓN — PENDIENTE DE AUTORIZACIÓN.
+
+## Hito anterior — 2026-10-16 (implementación del modelado D-3 — elementos y afinidades AZ–BC)
+Implementación en código de la **Alternativa C**. **Sin ejecutar migraciones, seeders, importadores ni escrituras en PostgreSQL.**
+
+**Diseño aplicado:**
+- **AZ `Elemental Affinity`:** tabla 1:N `blueprint_elemental_affinities` (`blueprint_id`, `element_id`, `position` 1–2 con CHECK PostgreSQL, `raw_value`); preserva el orden/prioridad original; UNIQUE `(blueprint_id, element_id)` y `(blueprint_id, position)`.
+- **BA `Spirit Affinity`:** catálogo independiente `spirit_affinities`; `blueprints.spirit_affinity_id` re-apuntado.
+- **BB `Built-In Element`:** catálogo `enchantments` (name UNIQUE, type + CHECK `Element|Spirit`); `blueprints.built_in_element_id` re-apuntado.
+- **BC `Built-In Spirit`:** catálogo independiente `spirits`; `blueprints.built_in_spirit_id` re-apuntado; incluye `Mundra's Spirit`.
+
+**Migraciones nuevas (NO ejecutadas):** `2026_10_16_000001` (enchantments), `..._000002` (spirit_affinities), `..._000003` (spirits), `..._000004` (blueprint_elemental_affinities), `..._000005` (cambio de FKs de `blueprints`, con guarda que aborta si las 4 columnas contienen datos).
+
+**Modelos:** nuevos `Enchantment`, `SpiritAffinity`, `Spirit`, `BlueprintElementalAffinity`; modificados `Blueprint` (relaciones + `$fillable`) y `Element`.
+
+**Importador:** `BlueprintRowData` (5 campos nuevos), `BlueprintExcelReader` (constantes AZ–BC, parser que preserva orden, lectores de catálogos, hoja `Enchantments`), `BlueprintImportService` (validación de no resueltos + `persistAffinities()` idempotente).
+
+**Seeders:** `BlueprintCatalogSeeder` (base), `ElementSeeder`, `EnchantmentSeeder`, `SpiritAffinitySeeder`, `SpiritSeeder` (idempotentes); registrados en `DatabaseSeeder`.
+
+**Tests:** 6 tests en `BlueprintImportServiceTest` (incluye tipo incorrecto de BB) + nuevo `BlueprintAffinityForeignKeysRollbackTest` (3 tests).
+
+**Discrepancia resuelta:** el catálogo `enchantments` no existía; se creó con **aprobación explícita del usuario**.
+
+**Validaciones (ejecutadas en el contenedor `app`, SQLite `:memory:`):** `php -l` OK (21/21 archivos) · Pint PASS (21 files) · `php artisan test` → **56 passed (421 assertions)**. Diagnósticos IDE sin errores. **NO se ejecutaron migraciones, seeders ni importadores en PostgreSQL.**
+
+**Revisión correctiva (2026-10-16):** (1) `down()` de `000005` ahora aborta antes de tocar el esquema si hay datos en las columnas de afinidad o filas en `blueprint_elemental_affinities`; (2) `built_in_element_id` se valida en la aplicación para exigir un `enchantment` de tipo `Element`; (3) validaciones ejecutadas (ver arriba); (4) cobertura AZ–BC de seeders/importador revisada sin hallazgos.
+
+**Documentación:** `docs/reports/2026-10-16_implementacion_modelado_elements_afinidades.md`.
+
+**Confirmación:** sin migraciones, seeders, importadores ni escrituras en PostgreSQL; sin commit ni push.
+
+**Estado:** IMPLEMENTADO — PENDIENTE DE REVISIÓN.
+
+## Hito anterior — 2026-10-16 (análisis de modelado D-3 — elementos y afinidades AZ–BC)
+Análisis de **solo lectura** del Excel v26.9.1. **Sin escrituras en PostgreSQL; sin cambios de código/esquema.**
+
+**Hallazgo principal:** las 4 columnas (AZ `Elemental Affinity`, BA `Spirit Affinity`, BB `Built-In Element`, BC `Built-In Spirit`) pertenecen a **3–4 dominios distintos**, por lo que un único catálogo `elements` NO es suficiente:
+- AZ: 31 valores no vacíos = 8 tokens base (Dark126, Earth114, Light103, Gold101, Water89, Fire68, Air66, All26) + **23 cadenas compuestas** (2 elementos; `"Earth, Dark"` vs `"Dark, Earth"` → orden no canónico; 15 pares canónicos). 824 `---`.
+- BA: 38 nombres `<Ser> <Cualidad>` (Wolf Ferocity, Bear Vitality…); solo 3 coinciden con `Enchantments`. 1296 `---`.
+- BB: 30 nombres `X Element` → **100 % coinciden con la hoja `Enchantments`** (33 `Element`). 1541 `---`.
+- BC: 1 valor `Mundra's Spirit` (10 filas; ligado al worker Mundra, no está en `Enchantments`). 1616 `---`.
+
+**Discrepancia:** `DATA_MODEL_ANALYSIS.md` §3.4 documentaba `elements = {Fire, Water, Earth, Air, Light, Dark, Spirit, Soul, None}`; los datos **refutan** esa hipótesis (no hay `Spirit`/`Soul`/`None` en AZ–BC).
+
+**Recomendación (Alternativa C):** `elements` (tokens base, pendiente aclarar `Gold`/`All`); nueva tabla 1:N `blueprint_elemental_affinities` para AZ (soporta compuestos); nuevo catálogo `spirit_affinities` para BA; **reutilizar `enchantments`** para BB; nuevo catálogo `spirits` para BC. Alternativas A/B/D comparadas en el reporte.
+
+**Documentación:** `docs/reports/2026-10-16_analisis_modelado_elements_afinidades.md`.
+
+**Confirmación:** solo lecturas del Excel con Python estándar (el daemon de Docker no estaba disponible); sin migraciones, seeders, importadores ni escrituras en PostgreSQL; sin commit ni push.
+
+**Estado:** PROPUESTA — PENDIENTE DE APROBACIÓN.
+
+## Hito anterior — 2026-10-15 (cierre de hallazgos H-1, H-2, H-3)
 Implementadas las tres mejoras aprobadas de la revisión final del importador. **Sin escrituras en PostgreSQL.**
 
 - **H-1 (código):** en `BlueprintImportService::importComponents()` la carga de catálogos (`loadComponentCatalogs()`) se envuelve en `try/catch` y devuelve `ComponentImportResult::failure(...)` ante error. Se mantiene fuera de la transacción (semántica de rollback intacta).
@@ -437,23 +534,30 @@ Reporte:
 - Migraciones/modelos: 🟢 APROBADO
 - Migración PostgreSQL: 🟢 EJECUTADA / VALIDADA
 - Seeders catálogos: 🟢 EJECUTADA / VALIDADA (resources=12, qualities=5, item_categories=40, workers=19, worker_levels=50)
-- Elements: ⏳ PENDIENTE DE DECISIÓN (no resuelto)
+- D-3 elementos/afinidades AZ–BC: 🟢 **EJECUTADA Y VALIDADA EN POSTGRESQL**. 5 migraciones `Ran` (batch [4]); 4 seeders de catálogos; `import:blueprints` (1549/0/1549/0, EXIT 0). Conteos: `elements`=8, `enchantments`=73 (Element 33/Spirit 40), `spirit_affinities`=38, `spirits`=1, `blueprint_elemental_affinities`=911. 0 huérfanos, orden AZ preservado.
 - Análisis BlueprintImporter: 🟢 PROPUESTA APROBADA
 - BlueprintImporter Etapa 2 (sin componentes): 🟢 EJECUTADA Y VALIDADA — 1549 blueprints en PostgreSQL
 - D-1 `crafting_materials`: 🟢 EJECUTADA Y VALIDADA POR CONTEOS. `crafting_materials`=186 (99/66/6/15) y `blueprint_components`=2,747. Memoria PHP configurada de forma permanente (`memory_limit=512M` en la imagen).
 - Comando `import:blueprint-components`: 🟢 EJECUTADO sobre Excel v26.9.1 → 1.549 procesados, 2.747 insertados, 0 incidencias. Revision final completada; H-1/H-2/H-3 implementados (H-4 sin cambios). Pendiente de revisión.
 - Preflight D-1 (solo lectura): 🟢 COMPLETADO — LISTO PARA SOLICITAR AUTORIZACIÓN (sin bloqueos; migraciones D-1 Pending; `blueprints`=1549, `blueprint_components`=0, `crafting_materials` no existe).
 - API: ⏳ PENDIENTE
-- Tests: 🟢 46 passed (382 assertions) — 45 previos + 1 nuevo del comando
+- Tests: 🟢 **56 passed (421 assertions)** — incluye los tests de afinidades de D-3 (`BlueprintImportServiceTest` 12, `BlueprintAffinityForeignKeysRollbackTest` 3) sobre SQLite `:memory:`.
 
 ## Próximo paso
-D-1 está ejecutada y validada por conteos, el límite de memoria PHP quedó configurado de forma permanente (`memory_limit=512M`) y los hallazgos H-1/H-2/H-3 del importador de componentes están implementados. Queda pendiente:
+D-1 está ejecutada y validada por conteos, el límite de memoria PHP quedó configurado de forma permanente (`memory_limit=512M`) y los hallazgos H-1/H-2/H-3 del importador de componentes están implementados.
 
-1. Revisión humana de H-1/H-2/H-3 (estado actual: IMPLEMENTADA — PENDIENTE DE REVISIÓN).
-2. (Opcional, no autorizado) decidir si se activa `log_errors`/`error_log` para fatales.
-3. (Opcional, no autorizado) H-4: valorar un segundo código de salida para "completado con incidencias" (actualmente sin cambios).
+**D-3 (elementos/afinidades AZ–BC): EJECUTADA Y VALIDADA EN POSTGRESQL (2026-10-16).** Se ejecutaron (autorizados por el usuario): las 5 migraciones nuevas (`2026_10_16_000001..000005`, batch [4], `Ran`), los seeders de catálogos por clase (`ElementSeeder`, `EnchantmentSeeder`, `SpiritAffinitySeeder`, `SpiritSeeder`, sin `db:seed` global) y `import:blueprints` (EXIT 0). Validación de solo lectura sin discrepancias bloqueantes. Ver `docs/reports/2026-10-16_ejecucion_d3_postgresql.md`.
+
+Pendiente de decisión humana (no autorizado, no iniciado):
+1. Revisión humana del reporte de ejecución D-3.
+2. Decisiones de modelado abiertas: semántica de `Gold`/`All`, mapeo `Spirit Affinity` (BA) ↔ `enchantments`, y API de catálogos.
+3. Revisión humana de H-1/H-2/H-3 del importador de componentes (estado actual: IMPLEMENTADA — PENDIENTE DE REVISIÓN).
+4. (Opcional, no autorizado) decidir si se activa `log_errors`/`error_log` para fatales.
+5. (Opcional, no autorizado) H-4: valorar un segundo código de salida para "completado con incidencias" (actualmente sin cambios).
 
 Validación ya obtenida: `crafting_materials`=186 (99 blueprint, 66 quest_component, 6 sigil, 15 enchantment), `blueprint_components`=2,747 y `memory_limit=512M` efectivo. Tests: `ImportBlueprintComponentsCommandTest` 7 passed; relacionados 22 passed.
+
+Validación D-3 (real): `php -l` OK, Pint PASS y `php artisan test` → 56 passed (421 assertions) sobre SQLite `:memory:`. Ejecución en PostgreSQL: `blueprints`=1549 (IDs preservados), `elements`=8, `enchantments`=73, `spirit_affinities`=38, `spirits`=1, `blueprint_elemental_affinities`=911, 0 huérfanos, orden AZ preservado.
 
 ## Regla
 El detalle de cada tarea vive en `docs/reports/`. Este archivo resume estado, decisiones y próximos pasos.

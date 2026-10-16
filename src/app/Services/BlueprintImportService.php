@@ -7,9 +7,13 @@ use App\Imports\ComponentImportResult;
 use App\Imports\ImportResult;
 use App\Models\Blueprint;
 use App\Models\CraftingMaterial;
+use App\Models\Element;
+use App\Models\Enchantment;
 use App\Models\ItemCategory;
 use App\Models\Quality;
 use App\Models\Resource;
+use App\Models\Spirit;
+use App\Models\SpiritAffinity;
 use App\Models\Worker;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -26,6 +30,14 @@ class BlueprintImportService
     private Collection $materialsByName;
 
     private Collection $qualitiesByName;
+
+    private Collection $elementsByName;
+
+    private Collection $spiritAffinitiesByName;
+
+    private Collection $enchantmentsByName;
+
+    private Collection $spiritsByName;
 
     public function import(Collection $rows): ImportResult
     {
@@ -65,6 +77,7 @@ class BlueprintImportService
 
                     $this->persistWorkers($blueprint, $row);
                     $this->persistResources($blueprint, $row);
+                    $this->persistAffinities($blueprint, $row);
                     $this->persistCraftingUpgrades($blueprint, $row);
                     $this->persistStarforgedMilestones($blueprint, $row);
                     $this->persistAscensionUpgrades($blueprint, $row);
@@ -185,6 +198,10 @@ class BlueprintImportService
         $this->categoriesByName = ItemCategory::all()->keyBy('name');
         $this->workersByKey = Worker::all()->keyBy('worker_key');
         $this->resourcesByName = Resource::all()->keyBy('name');
+        $this->elementsByName = Element::all()->keyBy('name');
+        $this->spiritAffinitiesByName = SpiritAffinity::all()->keyBy('name');
+        $this->enchantmentsByName = Enchantment::all()->keyBy('name');
+        $this->spiritsByName = Spirit::all()->keyBy('name');
     }
 
     private function loadComponentCatalogs(): void
@@ -231,6 +248,50 @@ class BlueprintImportService
             }
         }
 
+        foreach ($row->elementalAffinities as $elementName) {
+            if (! $this->elementsByName->has($elementName)) {
+                $errors->push([
+                    'row' => $excelRow,
+                    'blueprint' => $row->name,
+                    'message' => "Elemento de afinidad no encontrado en catálogo: '{$elementName}'.",
+                ]);
+            }
+        }
+
+        if ($row->spiritAffinityName !== null && ! $this->spiritAffinitiesByName->has($row->spiritAffinityName)) {
+            $errors->push([
+                'row' => $excelRow,
+                'blueprint' => $row->name,
+                'message' => "Afinidad espiritual no encontrada en catálogo: '{$row->spiritAffinityName}'.",
+            ]);
+        }
+
+        if ($row->builtInElementName !== null) {
+            $enchantment = $this->enchantmentsByName->get($row->builtInElementName);
+
+            if ($enchantment === null) {
+                $errors->push([
+                    'row' => $excelRow,
+                    'blueprint' => $row->name,
+                    'message' => "Elemento incorporado no encontrado en catálogo de encantamientos: '{$row->builtInElementName}'.",
+                ]);
+            } elseif ($enchantment->type !== Enchantment::TYPE_ELEMENT) {
+                $errors->push([
+                    'row' => $excelRow,
+                    'blueprint' => $row->name,
+                    'message' => "Elemento incorporado '{$row->builtInElementName}' no es de tipo Element (tipo real: '{$enchantment->type}').",
+                ]);
+            }
+        }
+
+        if ($row->builtInSpiritName !== null && ! $this->spiritsByName->has($row->builtInSpiritName)) {
+            $errors->push([
+                'row' => $excelRow,
+                'blueprint' => $row->name,
+                'message' => "Espíritu incorporado no encontrado en catálogo: '{$row->builtInSpiritName}'.",
+            ]);
+        }
+
         return $errors;
     }
 
@@ -271,6 +332,35 @@ class BlueprintImportService
                 'quantity' => $resource['quantity'],
             ]);
         }
+    }
+
+    private function persistAffinities(Blueprint $blueprint, BlueprintRowData $row): void
+    {
+        // AZ: se reconstruye la relacion 1:N preservando el orden original de la celda.
+        $blueprint->elementalAffinities()->delete();
+
+        foreach ($row->elementalAffinities as $index => $elementName) {
+            $blueprint->elementalAffinities()->create([
+                'element_id' => $this->elementsByName->get($elementName)->id,
+                'position' => $index + 1,
+                'raw_value' => $row->elementalAffinityRaw,
+            ]);
+        }
+
+        // BA / BB / BC: relaciones unicas resueltas contra sus catalogos.
+        $blueprint->spirit_affinity_id = $row->spiritAffinityName !== null
+            ? $this->spiritAffinitiesByName->get($row->spiritAffinityName)->id
+            : null;
+
+        $blueprint->built_in_element_id = $row->builtInElementName !== null
+            ? $this->enchantmentsByName->get($row->builtInElementName)->id
+            : null;
+
+        $blueprint->built_in_spirit_id = $row->builtInSpiritName !== null
+            ? $this->spiritsByName->get($row->builtInSpiritName)->id
+            : null;
+
+        $blueprint->save();
     }
 
     private function persistCraftingUpgrades(Blueprint $blueprint, BlueprintRowData $row): void

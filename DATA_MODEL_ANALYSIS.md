@@ -52,9 +52,11 @@ Agrupación real de columnas, detectada al inspeccionar el Excel:
 | `worker_levels` | `Worker Levels` (hoja INDEPENDIENTE) | Tabla de XP y speed bonus por cada nivel del worker. **NO** es una relación con blueprints, es progreso intrínseco. |
 | `resources` | Hoja `Blueprints` cols Y-AJ (12 fijos) | Catálogo cerrado n=12. Orden: Iron, Wood, Leather, Herbs, Steel, Ironwood, Fabric, Oils, Mana, Gems, Essence, Stardust. |
 | `item_categories` | Hoja `Blueprints` col B "Type" | Valores: Sword, Axe, Dagger, Spear, Heavy Armor, Light Armor, Mask, Scythe, Boots, Gloves, Ring, Amulet, etc. Cada blueprint tiene exactamente 1 "Type". |
-| `elements` | Hoja `Blueprints` cols AZ-BC | Elementos / espíritus que aparecen en afinidades y built-in: Fire, Water, Earth, Air, Light, Dark, Spirit, Soul + None. |
+| `elements` | Hoja `Blueprints` col AZ (tokens base, tras dividir compuestos) | **Corregido 2026-10-16 (D-3).** Tokens base observados en v26.9.1: `Dark, Earth, Light, Water, Fire, Air` + `Gold`, `All` (semántica de estos dos pendiente). La hipótesis previa (`Spirit, Soul, None`) quedó **refutada**. Los pares compuestos de AZ se normalizan en `blueprint_elemental_affinities`. |
 | `qualities` | Hoja `Blueprints` cols AM / AP "Component Quality" | Calidades: Normal, Superior, Flawless, Epic, Legendary. `"---"` = sin calidad mínima. |
-| `enchantments` | Hoja `Enchantments` (INDEPENDIENTE) | Lista de encantamientos del juego. Actualmente es un catálogo aislado (sin relación a blueprints en el Excel). |
+| `enchantments` | Hoja `Enchantments` (INDEPENDIENTE) | **Actualizado 2026-10-16 (D-3).** Catálogo real (`name UNIQUE`, `type`). `blueprints.built_in_element_id` lo referencia (coincidencia 100 % verificada en BB). |
+| `spirit_affinities` | Hoja `Blueprints` col BA | **Nuevo (D-3).** Catálogo de los 38 nombres `<Ser> <Cualidad>` de Spirit Affinity. |
+| `spirits` | Hoja `Blueprints` col BC | **Nuevo (D-3).** Catálogo de Built-In Spirit (`Mundra's Spirit`). |
 | `skills` | Hoja `Skills` (INDEPENDIENTE) | Habilidades de Héroes / Campeones (personajes jugables). **NO pertenecen al MVP del módulo Blueprints.** |
 
 #### Importante — Skills: NO son de Blueprints
@@ -93,6 +95,7 @@ Se conserva el **valor LITERAL** proveniente del Excel:
 | `blueprints` | A-P + AS-AX + AZ-BC + CN-CS | 1 fila por blueprint (toda la información atómica NO repetitiva). |
 | `blueprint_workers` | R-W (3 máx) | 1:N / trabajadores que pueden craftear el BP + nivel mínimo requerido. |
 | `blueprint_resources` | Y-AJ (12 recursos) | 1:N / `blueprint_id, resource_id, quantity`. Solo se inserta si `quantity > 0` / distinto de `"---"`. |
+| `blueprint_elemental_affinities` | AZ (1-2 elementos separados por `", "`) | 1:N / `blueprint_id, element_id, position, raw_value`. **Sustituye la columna `blueprints.elemental_affinity_id`** (D-3). Preserva el orden/prioridad original. |
 | `blueprint_components` | AL-AQ (2 máx) | 1:N / `blueprint_id` (padre), `component_id` (hijo, FK al mismo blueprints — **relación recursiva**), `quality_id` nullable, `amount`. |
 | `blueprint_crafting_upgrades` | BE-BN (5 niveles) | 1:N / `upgrade_level, name, crafts_required`. |
 | `blueprint_starforged_milestones` | BP-BY (5 milestones) | 1:N / `milestone_number, name, crafts_required`. |
@@ -136,21 +139,27 @@ Se conserva el **valor LITERAL** proveniente del Excel:
 | column_letter_in_excel | "Y", "Z", ..., "AJ" | **IMPORTANTE para BlueprintImporter**, ya que las columnas no tienen header. |
 | tier | T1, T2, T3... | Iron/Wood/Leather/Herbs = básicos (T1), Steel/Ironwood/Fabric/Oils = avanzados (T2), Mana/Gems/Essence = raros (T3), Stardust = endgame. |
 
-### 3.4 `elements` (afinidades + built-in)
+### 3.4 `elements` (tokens base de Elemental Affinity)
+
+**Corregido 2026-10-16 (D-3).** La hipótesis previa (`Fire, Water, Earth, Air, Light, Dark, Spirit, Soul, None`) quedó **refutada**: en la hoja `Blueprints` v26.9.1 no aparece `Spirit`, `Soul` ni `None` en AZ–BC.
 
 | Campo | Valor ejemplo |
 |---|---|
 | id | PK |
-| name (UNIQUE) | "Fire", "Water", "Earth", "Air", "Light", "Dark", "Spirit", "Soul", "None" |
+| name (UNIQUE) | "Dark", "Earth", "Light", "Water", "Fire", "Air", "Gold", "All" |
+
+`Gold` y `All` se mantienen provisionalmente como filas (semántica pendiente de investigación). Los pares compuestos de AZ (`"Earth, Dark"`) **no** se guardan como nombre de `elements`: se normalizan en `blueprint_elemental_affinities` con `position` (1 = prioritario).
 
 ### 3.5 `enchantments` (Hoja Enchantments)
+
+**Actualizado 2026-10-16 (D-3).** El catálogo pasó a existir como tabla real (antes solo era una hipótesis de diseño). `blueprints.built_in_element_id` lo referencia. La columna `value` de la hoja fuente **no** se incluyó (fuera del alcance de D-3; pendiente documentado).
 
 | Campo | Columna Excel | Ejemplo |
 |---|---|---|
 | id | PK | |
-| **name** (UNIQUE) | A "Name" | "Ember Element", "Flame Element", "Blaze Element", "Inferno Element" |
-| **type** | B "Type" | "Element" |
-| **value** | C *(sin header)* | 5, 10, 15, 25... |
+| **name** (UNIQUE) | A "Name" | "Ember Element", "Flame Element", "Holy Element" |
+| **type** | B "Type" | "Element" / "Spirit" (CHECK en PostgreSQL) |
+| ~~value~~ | C *(sin header)* | **No implementado** (pendiente). |
 
 ### 3.6 `blueprints` (tabla principal — información NO repetitiva)
 
@@ -179,10 +188,10 @@ Se conserva el **valor LITERAL** proveniente del Excel:
 | **eva** | AV "EVA" | integer nullable | |
 | **crit** | AW "CRIT" | integer nullable | |
 | **mana_shield** | AX "Mana Shield" | integer nullable | |
-| elemental_affinity_id (FK elements) | AZ | bigint nullable | `"---"` → None / null |
-| spirit_affinity_id (FK elements) | BA | bigint nullable | |
-| built_in_element_id (FK elements) | BB | bigint nullable | |
-| built_in_spirit_id (FK elements) | BC | bigint nullable | |
+| ~~elemental_affinity_id~~ (Eliminada en D-3) | AZ | — | Sustituida por la tabla 1:N `blueprint_elemental_affinities` (preserva orden/prioridad). |
+| spirit_affinity_id (FK `spirit_affinities`) | BA | bigint nullable | `"---"` → null. |
+| built_in_element_id (FK `enchantments`) | BB | bigint nullable | `"---"` → null. |
+| built_in_spirit_id (FK `spirits`) | BC | bigint nullable | `"---"` → null. |
 | discount_energy | CN "Discount Energy" | integer | |
 | surcharge_energy | CO "Surcharge Energy" | integer | |
 | suggest_energy | CP "Suggest Energy" | integer | |
@@ -190,7 +199,7 @@ Se conserva el **valor LITERAL** proveniente del Excel:
 | available_as_antique_at | CS "Available as an Antique starting on (UTC)" | timestamp nullable | `"---"` → null |
 | created_at / updated_at | | timestamps | |
 
-> **Decisión arquitectónica:** estadísticas ATK/DEF/HP/EVA/CRIT/Mana Shield como **6 columnas directas** (Opción A). Es la opción más simple, evita 6 self-joins, y está alineada con la filosofía anti-sobrearquitectura del proyecto. Las 4 afinidades/elementos también son FK directas.
+> **Decisión arquitectónica:** estadísticas ATK/DEF/HP/EVA/CRIT/Mana Shield como **6 columnas directas** (Opción A). Es la opción más simple, evita 6 self-joins, y está alineada con la filosofía anti-sobrearquitectura del proyecto. **Actualizado 2026-10-16 (D-3):** de las 4 afinidades/elementos, AZ se modela como relación 1:N (`blueprint_elemental_affinities`) por admitir 1-2 valores con prioridad; BA/BB/BC quedan como FK directas a catálogos por dominio (`spirit_affinities`, `enchantments`, `spirits`).
 
 ---
 
@@ -202,6 +211,7 @@ Se conserva el **valor LITERAL** proveniente del Excel:
 |---|---|---|---|
 | `blueprint_workers` | `blueprint_id` | `worker_id` (FK workers) | `UNIQUE(blueprint_id, worker_id)` — un worker no puede tener 2 niveles distintos para el mismo BP. |
 | `blueprint_resources` | `blueprint_id` | `resource_id` (FK resources) | `UNIQUE(blueprint_id, resource_id)`. `quantity > 0`. **NO insertar fila si Excel = `"---"` o 0.** |
+| `blueprint_elemental_affinities` (D-3) | `blueprint_id` | `element_id` (FK elements) | `UNIQUE(blueprint_id, element_id)` + `UNIQUE(blueprint_id, position)`. `position` ∈ {1,2} (CHECK en PostgreSQL). Preserva el orden de AZ; `raw_value` guarda el literal de la celda. |
 | `blueprint_components` | `blueprint_id` (PADRE) | `component_id` (FK `blueprints.id` — ⚠️ **RECURSIVA**), `quality_id` (FK qualities nullable) | `UNIQUE(blueprint_id, component_id, quality_id)`. `amount > 0`. |
 | `blueprint_crafting_upgrades` | `blueprint_id` | — | `UNIQUE(blueprint_id, upgrade_level)`. levels = 1..5 |
 | `blueprint_starforged_milestones` | `blueprint_id` | — | `UNIQUE(blueprint_id, milestone_number)`. nums = 1..5 |
@@ -212,7 +222,7 @@ Se conserva el **valor LITERAL** proveniente del Excel:
 
 Análisis del Excel elimina tablas N:M propuestas provisionalmente:
 
-- ❌ `blueprint_possible_enchantments`: no existe mapeo Enchantments ↔ Blueprints. Enchantments = catálogo aislado.
+- ❌ `blueprint_possible_enchantments`: no existe mapeo Enchantments ↔ Blueprints. Enchantments = catálogo aislado. *(Nota D-3: `built_in_element_id` sí referencia `enchantments`, pero es una relación 1:N normal desde `blueprints`, no una N:M.)*
 - ❌ `blueprint_builtin_skills`: skills son de Heroes/Champions (columna "Classes"), NO de blueprints.
 
 ---
@@ -224,14 +234,17 @@ Análisis del Excel elimina tablas N:M propuestas provisionalmente:
 - `worker_levels` (hoja independiente de progresión)
 - `resources` (n=12, cols Y-AJ)
 - `item_categories` (tipos de item)
-- `elements` (afinidades y built-ins)
+- `elements` (tokens base de AZ; **corregido en D-3**)
 - `qualities` (calidades de componentes)
-- `enchantments` (catálogo, sin relación actual a BPs)
+- `enchantments` (catálogo; **relacionado por `built_in_element_id` desde D-3**)
+- `spirit_affinities` (**nuevo en D-3** — dominio de BA)
+- `spirits` (**nuevo en D-3** — dominio de BC)
 - `skills` (catálogo heroes/champs, sin uso aún en blueprints)
 
 ### ✅ Son RELACIÓN 1:N (nunca columnas planas)
 - Workers requeridos + niveles (3 grupos repetitivos → filas)
 - 12 Recursos + cantidades (cols Y-AJ → filas)
+- **Afinidad elemental AZ (1-2 elementos con prioridad → `blueprint_elemental_affinities`)** *(D-3)*
 - 2 Componentes + calidad + cantidad (→ filas)
 - 5 × Crafting Upgrades + Crafts → filas
 - 5 × Starforged Milestones + Crafts → filas
@@ -241,7 +254,7 @@ Análisis del Excel elimina tablas N:M propuestas provisionalmente:
 ### ✅ Son COLUMNAS DIRECTAS en `blueprints`
 - Datos generales: nombre, tipo, tier, tiempos, XP, valor, monedas, tokens, scrolls
 - 6 estadísticas: ATK, DEF, HP, EVA, CRIT, Mana Shield
-- 4 afinidades/elementos: 4 FKs a `elements`
+- **Afinidades BA/BB/BC: 3 FKs a `spirit_affinities`, `enchantments`, `spirits`** *(AZ pasó a 1:N en D-3)*
 - 4 energías: discount, surcharge, suggest, speedup
 - Antique date
 
@@ -278,9 +291,9 @@ Convención detectada: `"---"` = vacío / no aplica / 0.
 - Para columnas escalares en `blueprints` (research_scrolls, antique_tokens, etc.): `"---"` → `null`.
 - Para fechas (available_as_antique_at): `"---"` → `null`.
 
-### 🟡 Problema 5 — Skills y Enchantments sin relación en el Excel actual
+### 🟡 Problema 5 — Skills y Enchantments
 - `skills`: tablas creadas pero "dormidas" hasta el módulo Heroes/Champions.
-- `enchantments`: catálogo guardado pero sin relaciones. Se conectará cuando aparezca un uso real (ej: filtrar qué encantamientos aplican por categoría de ítem) o si el Excel crece con esa información.
+- `enchantments`: **Actualizado 2026-10-16 (D-3).** El catálogo ya NO está aislado: la columna `BB Built-In Element` se resuelve contra `enchantments` (hoja `Enchantments`, tipos `Element`/`Spirit`), quedando relacionada vía `blueprints.built_in_element_id`. La columna `BC Built-In Spirit` NO se resuelve contra `enchantments`: usa el catálogo independiente `spirits` (evidencia: `Mundra's Spirit` no aparece en la hoja `Enchantments`).
 
 ### 🟡 Problema 6 — Workers: 1 clase (worker_key) vs. N personas
 El worker se llama `Blacksmith` (clase/trabajo) y la columna B es el nombre de persona "Wallace". En el juego, ¿puedes contratar múltiples Blacksmiths con nombres distintos? Si la respuesta es sí, el diseño escalaría:
@@ -298,9 +311,9 @@ Pero esto pertenece al módulo de Heroes/Workers del jugador, NO al módulo Blue
 |---|---|---|
 | 1 | Workers: ¿datos propios o solo mapeo? | Sí tienen datos propios en Hoja Workers (coste, nivel, prereqs). → 2 tablas `workers` + `worker_levels`. |
 | 2 | Cols Required Worker son nombre? | Sí, directamente `worker_key` ("Blacksmith", "Tailor"). → FK a `workers`. |
-| 3 | Enchantments: catálogo o mapeo a BPs? | SOLO catálogo aislado. Sin relación actual a blueprints. |
+| 3 | Enchantments: catálogo o mapeo a BPs? | **Revisado D-3:** catálogo `enchantments` (name/type) relacionado con blueprints vía `built_in_element_id` (col BB). Azúcar BB = 100 % coincidencia con la hoja `Enchantments`. |
 | 4 | Skills: ¿de ítems o personajes? | Skills = Classes / Heroes / Champions (col G). Fuera de ámbito de blueprints. |
-| 5 | Enchantments permitidos por categoría? | Sin datos en el Excel. Guardamos catálogo sin relaciones. |
+| 5 | Enchantments permitidos por categoría? | Sin datos en el Excel. Sin relación por categoría. |
 | 6 | Enchantments por calidad? | Sin datos en el Excel. |
 | 7 | Shards y Seals son resources? | NO. Son integers genéricos en sus tablas de upgrade (no están en las 12 cols Y-AJ). |
 | 8 | Stats en 6 cols individuales? | Sí (AS-AX). Squire Sword = solo ATK=16. → 6 columnas directas. |
@@ -326,7 +339,9 @@ Pero esto pertenece al módulo de Heroes/Workers del jugador, NO al módulo Blue
            ▼                                            ▼            │
 ┌──────────────────────────────────────────────────────────────────── │
 │                    blueprints (TABLA PRINCIPAL)                     │
-│ name UNIQUE, category_id, stats(6), 4 elements FK, energies, etc.  │
+│ name UNIQUE, category_id, stats(6), energies, etc.                  │
+│ FKs afinidades: spirit_affinity_id, built_in_element_id,           │
+│                 built_in_spirit_id  (AZ → 1:N)                      │
 └──┬──┬──┬──┬──────────────┬──────────────┬────────────┬─────────────┘
    │  │  │  │              │              │            │
    │  │  │  │  blueprint_  │  blueprint_  │ blueprint_ │ 4 tablas:
@@ -334,16 +349,19 @@ Pero esto pertenece al módulo de Heroes/Workers del jugador, NO al módulo Blue
    │  │  │  │              │              │ recursiva: │ Starforged,
    │  │  │  │ worker_id,   │ resource_id, │ component  │ Ascension,
    │  │  │  │ level_req    │  quantity    │ quality_id │ Transcendence
-   │  │  │  │              │              │ amount     │
    ▼  ▼  ▼  ▼              ▼              ▼            ▼
-   (tablas 1:N con blueprint_id + campos específicos + UNIQUE)
+   blueprint_elemental_affinities (blueprint_id, element_id, position,
+                                   raw_value — UNIQUE blueprint+position)
+   + (tablas 1:N con blueprint_id + campos específicos + UNIQUE)
 
-┌───────────────────────────────────┐
-│  CATÁLOGOS SIN RELACIÓN (AÚN)      │
-├───────────────────┬───────────────┤
-│ enchantments      │ skills        │
-│ (Name/Type/Value) │ (heroes only) │
-└───────────────────┴───────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│  CATÁLOGOS DE AFINIDADES / ENCANTAMIENTOS                     │
+├───────────────────┬───────────────────┬───────────────────────┤
+│ elements (AZ)     │ enchantments (BB) │ spirit_affinities (BA)│
+│ tokens base       │ name/type         │ name                  │
+├───────────────────┴───────────────────┴───────────────────────┤
+│ spirits (BC)      │ skills (heroes only, sin relación)        │
+└───────────────────┴────────────────────────────────────────────┘
 ```
 
 ---
@@ -366,6 +384,25 @@ Cuando el diseño se apruebe, la implementación sigue este orden (alineado con 
 
 5. **Paso 7 — Seeders / BlueprintImporter**:
    Cargar primero los 12 `resources` (con su `column_letter_in_excel`), `elements`,
-   `qualities`, `workers`, `worker_levels`, `enchantments`, `skills`.
+   `qualities`, `workers`, `worker_levels`, `enchantments`, `spirit_affinities`,
+   `spirits`, `skills`.
    Luego: importar la hoja Blueprints (1.613 filas) con la lógica de 2 pasadas
    para componentes recursivos.
+
+### Estado tras D-3 (2026-10-16) — IMPLEMENTADO, PENDIENTE DE REVISIÓN
+
+El modelado de las columnas AZ–BC ya está **implementado en código** (migraciones
+incrementales, modelos, seeders e importador), pero **no ejecutado** en PostgreSQL.
+Pendiente de revisión y de autorización para ejecutar `migrate`/seeders/importador:
+
+- Migraciones nuevas: `2026_10_16_000001_create_enchantments_table`,
+  `..._000002_create_spirit_affinities_table`, `..._000003_create_spirits_table`,
+  `..._000004_create_blueprint_elemental_affinities_table`,
+  `..._000005_change_blueprints_affinity_foreign_keys`.
+- Seeders nuevos: `ElementSeeder`, `EnchantmentSeeder`, `SpiritAffinitySeeder`,
+  `SpiritSeeder` (idempotentes, `updateOrCreate`).
+- El importador resuelve AZ (1:N con `position`), BA/BB/BC (FKs directas), reporta
+  valores no resueltos y es idempotente ante reimportación.
+
+Ver `docs/reports/2026-10-16_implementacion_modelado_elements_afinidades.md`.
+

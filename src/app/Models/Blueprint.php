@@ -31,7 +31,6 @@ class Blueprint extends Model
         'eva',
         'crit',
         'mana_shield',
-        'elemental_affinity_id',
         'spirit_affinity_id',
         'built_in_element_id',
         'built_in_spirit_id',
@@ -69,24 +68,24 @@ class Blueprint extends Model
         return $this->belongsTo(ItemCategory::class, 'category_id');
     }
 
-    public function elementalAffinity(): BelongsTo
+    public function elementalAffinities(): HasMany
     {
-        return $this->belongsTo(Element::class, 'elemental_affinity_id');
+        return $this->hasMany(BlueprintElementalAffinity::class);
     }
 
     public function spiritAffinity(): BelongsTo
     {
-        return $this->belongsTo(Element::class, 'spirit_affinity_id');
+        return $this->belongsTo(SpiritAffinity::class, 'spirit_affinity_id');
     }
 
     public function builtInElement(): BelongsTo
     {
-        return $this->belongsTo(Element::class, 'built_in_element_id');
+        return $this->belongsTo(Enchantment::class, 'built_in_element_id');
     }
 
     public function builtInSpirit(): BelongsTo
     {
-        return $this->belongsTo(Element::class, 'built_in_spirit_id');
+        return $this->belongsTo(Spirit::class, 'built_in_spirit_id');
     }
 
     public function blueprintWorkers(): HasMany

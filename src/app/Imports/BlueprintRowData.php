@@ -39,6 +39,11 @@ class BlueprintRowData
         public readonly array $ascensionUpgrades,
         public readonly array $transcendenceUpgrades,
         public readonly array $components = [],
+        public readonly ?string $elementalAffinityRaw = null,
+        public readonly array $elementalAffinities = [],
+        public readonly ?string $spiritAffinityName = null,
+        public readonly ?string $builtInElementName = null,
+        public readonly ?string $builtInSpiritName = null,
     ) {}
 
     public function toBlueprintAttributes(): array

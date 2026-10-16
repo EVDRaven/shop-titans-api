@@ -21,6 +21,10 @@ class DatabaseSeeder extends Seeder
             ItemCategorySeeder::class,
             WorkerSeeder::class,
             WorkerLevelSeeder::class,
+            ElementSeeder::class,
+            EnchantmentSeeder::class,
+            SpiritAffinitySeeder::class,
+            SpiritSeeder::class,
         ]);
 
         User::factory()->create([

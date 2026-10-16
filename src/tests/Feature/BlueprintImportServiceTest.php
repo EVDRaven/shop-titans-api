@@ -4,6 +4,10 @@ namespace Tests\Feature;
 
 use App\Imports\BlueprintRowData;
 use App\Models\Blueprint;
+use App\Models\Element;
+use App\Models\Enchantment;
+use App\Models\Spirit;
+use App\Models\SpiritAffinity;
 use App\Services\BlueprintImportService;
 use Database\Seeders\ItemCategorySeeder;
 use Database\Seeders\ResourceSeeder;
@@ -49,10 +53,10 @@ class BlueprintImportServiceTest extends TestCase
         $this->assertEquals(1, $squireSword->tier);
         $this->assertEquals(27, $squireSword->gold_value);
         $this->assertEquals('Sword', $squireSword->category->name);
-        $this->assertNull($squireSword->elemental_affinity_id);
         $this->assertNull($squireSword->spirit_affinity_id);
         $this->assertNull($squireSword->built_in_element_id);
         $this->assertNull($squireSword->built_in_spirit_id);
+        $this->assertEquals(0, $squireSword->elementalAffinities()->count());
 
         $this->assertEquals(1, $squireSword->blueprintWorkers->count());
         $this->assertEquals(2, $squireSword->blueprintResources->count());
@@ -147,10 +151,119 @@ class BlueprintImportServiceTest extends TestCase
         $this->assertEquals(0, Blueprint::count());
     }
 
+    public function test_import_resolves_elemental_affinities_preserving_order(): void
+    {
+        Element::create(['name' => 'Earth']);
+        Element::create(['name' => 'Dark']);
+
+        $dto = $this->makeSquireSwordDto(
+            elementalAffinityRaw: 'Earth, Dark',
+            elementalAffinities: ['Earth', 'Dark'],
+        );
+
+        $result = $this->service->import(collect([$dto]));
+
+        $this->assertTrue($result->success);
+
+        $blueprint = Blueprint::where('name', 'Squire Sword')->first();
+        $affinities = $blueprint->elementalAffinities()->orderBy('position')->get();
+
+        $this->assertCount(2, $affinities);
+        $this->assertEquals(1, $affinities[0]->position);
+        $this->assertEquals('Earth', $affinities[0]->element->name);
+        $this->assertEquals(2, $affinities[1]->position);
+        $this->assertEquals('Dark', $affinities[1]->element->name);
+        $this->assertEquals('Earth, Dark', $affinities[0]->raw_value);
+        $this->assertEquals('Earth, Dark', $affinities[1]->raw_value);
+    }
+
+    public function test_import_reports_unresolved_elemental_affinity(): void
+    {
+        $dto = $this->makeSquireSwordDto(
+            elementalAffinityRaw: 'Plasma',
+            elementalAffinities: ['Plasma'],
+        );
+
+        $result = $this->service->import(collect([$dto]));
+
+        $this->assertFalse($result->success);
+        $this->assertEquals(0, Blueprint::count());
+        $this->assertStringContainsString('Plasma', $result->errors->first()['message']);
+    }
+
+    public function test_reimport_does_not_duplicate_elemental_affinities(): void
+    {
+        Element::create(['name' => 'Fire']);
+        Element::create(['name' => 'Water']);
+
+        $dto = $this->makeSquireSwordDto(
+            elementalAffinityRaw: 'Fire, Water',
+            elementalAffinities: ['Fire', 'Water'],
+        );
+
+        $this->service->import(collect([$dto]));
+        $this->service->import(collect([$dto]));
+
+        $blueprint = Blueprint::where('name', 'Squire Sword')->first();
+        $this->assertEquals(2, $blueprint->elementalAffinities()->count());
+    }
+
+    public function test_import_resolves_spirit_affinity_and_built_in_references(): void
+    {
+        SpiritAffinity::create(['name' => 'Wolf Ferocity']);
+        Enchantment::create(['name' => 'Ember Element', 'type' => Enchantment::TYPE_ELEMENT]);
+        Spirit::create(['name' => "Mundra's Spirit"]);
+
+        $dto = $this->makeSquireSwordDto(
+            spiritAffinityName: 'Wolf Ferocity',
+            builtInElementName: 'Ember Element',
+            builtInSpiritName: "Mundra's Spirit",
+        );
+
+        $result = $this->service->import(collect([$dto]));
+
+        $this->assertTrue($result->success);
+
+        $blueprint = Blueprint::where('name', 'Squire Sword')->first();
+        $this->assertEquals('Wolf Ferocity', $blueprint->spiritAffinity->name);
+        $this->assertEquals('Ember Element', $blueprint->builtInElement->name);
+        $this->assertEquals("Mundra's Spirit", $blueprint->builtInSpirit->name);
+    }
+
+    public function test_import_reports_unresolved_built_in_element(): void
+    {
+        $dto = $this->makeSquireSwordDto(builtInElementName: 'Unknown Element');
+
+        $result = $this->service->import(collect([$dto]));
+
+        $this->assertFalse($result->success);
+        $this->assertEquals(0, Blueprint::count());
+        $this->assertStringContainsString('Unknown Element', $result->errors->first()['message']);
+    }
+
+    public function test_import_reports_built_in_element_with_wrong_type(): void
+    {
+        Enchantment::create(['name' => 'Wolf Spirit', 'type' => Enchantment::TYPE_SPIRIT]);
+
+        $dto = $this->makeSquireSwordDto(builtInElementName: 'Wolf Spirit');
+
+        $result = $this->service->import(collect([$dto]));
+
+        $this->assertFalse($result->success);
+        $this->assertEquals(0, Blueprint::count());
+        $this->assertStringContainsString('Wolf Spirit', $result->errors->first()['message']);
+        $this->assertStringContainsString('Element', $result->errors->first()['message']);
+    }
+
     private function makeSquireSwordDto(
         string $categoryName = 'Sword',
         array $workers = [],
         array $extraResources = [],
+        ?string $elementalAffinityRaw = null,
+        array $elementalAffinities = [],
+        ?string $spiritAffinityName = null,
+        ?string $builtInElementName = null,
+        ?string $builtInSpiritName = null,
     ): BlueprintRowData {
         $workers = $workers ?: [
             ['worker_key' => 'Blacksmith', 'level_required' => 1],
@@ -215,6 +328,11 @@ class BlueprintImportServiceTest extends TestCase
                 ['upgrade_level' => 2, 'name' => 'Transcendence II', 'seals_required' => 10],
                 ['upgrade_level' => 3, 'name' => 'Transcendence III', 'seals_required' => 30],
             ],
+            elementalAffinityRaw: $elementalAffinityRaw,
+            elementalAffinities: $elementalAffinities,
+            spiritAffinityName: $spiritAffinityName,
+            builtInElementName: $builtInElementName,
+            builtInSpiritName: $builtInSpiritName,
         );
     }
 

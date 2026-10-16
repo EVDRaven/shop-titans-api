@@ -80,6 +80,14 @@ class BlueprintExcelReader
 
     private const COLUMN_MANA_SHIELD = 'AX';
 
+    private const COLUMN_ELEMENTAL_AFFINITY = 'AZ';
+
+    private const COLUMN_SPIRIT_AFFINITY = 'BA';
+
+    private const COLUMN_BUILT_IN_ELEMENT = 'BB';
+
+    private const COLUMN_BUILT_IN_SPIRIT = 'BC';
+
     private const CRAFTING_UPGRADE_COLUMNS = [
         ['name' => 'BE', 'crafts' => 'BF'],
         ['name' => 'BG', 'crafts' => 'BH'],
@@ -133,6 +141,8 @@ class BlueprintExcelReader
     private const QUEST_COMPONENTS_SHEET = 'Quest Components';
 
     private const FULL_MOON_FUSIONS_SHEET = 'Full Moon Fusions';
+
+    private const ENCHANTMENTS_SHEET = 'Enchantments';
 
     public const ENCHANTMENT_TYPE = 'Enchantment';
 
@@ -392,8 +402,91 @@ class BlueprintExcelReader
         ];
     }
 
+    public function readElementalAffinityTokens(string $filePath): Collection
+    {
+        return $this->distinctBlueprintColumnTokens($filePath, self::COLUMN_ELEMENTAL_AFFINITY, true);
+    }
+
+    public function readSpiritAffinityNames(string $filePath): Collection
+    {
+        return $this->distinctBlueprintColumnTokens($filePath, self::COLUMN_SPIRIT_AFFINITY);
+    }
+
+    public function readBuiltInElementNames(string $filePath): Collection
+    {
+        return $this->distinctBlueprintColumnTokens($filePath, self::COLUMN_BUILT_IN_ELEMENT);
+    }
+
+    public function readBuiltInSpiritNames(string $filePath): Collection
+    {
+        return $this->distinctBlueprintColumnTokens($filePath, self::COLUMN_BUILT_IN_SPIRIT);
+    }
+
+    public function readEnchantmentCatalog(string $filePath): Collection
+    {
+        $reader = IOFactory::createReader('Xlsx');
+        $reader->setReadDataOnly(true);
+        $spreadsheet = $reader->load($filePath);
+        $worksheet = $spreadsheet->getSheetByName(self::ENCHANTMENTS_SHEET);
+
+        $entries = collect();
+        $highestRow = $worksheet->getHighestRow();
+
+        for ($row = 2; $row <= $highestRow; $row++) {
+            $name = $this->getString($worksheet, $row, 'A');
+            $type = $this->getString($worksheet, $row, 'B');
+
+            if ($name === null || $type === null) {
+                continue;
+            }
+
+            $entries->put($name, ['name' => $name, 'type' => $type]);
+        }
+
+        $spreadsheet->disconnectWorksheets();
+
+        return $entries;
+    }
+
+    private function distinctBlueprintColumnTokens(string $filePath, string $column, bool $splitCommas = false): Collection
+    {
+        $reader = IOFactory::createReader('Xlsx');
+        $reader->setReadDataOnly(true);
+        $spreadsheet = $reader->load($filePath);
+        $worksheet = $spreadsheet->getSheetByName('Blueprints');
+
+        $tokens = collect();
+        $highestRow = $worksheet->getHighestRow();
+
+        for ($row = 2; $row <= $highestRow; $row++) {
+            $name = $this->getString($worksheet, $row, self::COLUMN_NAME);
+
+            if ($name === null || $this->getString($worksheet, $row, self::COLUMN_TYPE) === self::ENCHANTMENT_TYPE) {
+                continue;
+            }
+
+            $value = $this->getString($worksheet, $row, $column);
+
+            if ($value === null) {
+                continue;
+            }
+
+            $parts = $splitCommas ? $this->parseElementalAffinities($value) : [$value];
+
+            foreach ($parts as $part) {
+                $tokens->put($part, $part);
+            }
+        }
+
+        $spreadsheet->disconnectWorksheets();
+
+        return $tokens;
+    }
+
     private function parseRow(Worksheet $worksheet, int $row): BlueprintRowData
     {
+        $elementalAffinityRaw = $this->getString($worksheet, $row, self::COLUMN_ELEMENTAL_AFFINITY);
+
         return new BlueprintRowData(
             name: $this->getString($worksheet, $row, self::COLUMN_NAME) ?? '',
             categoryName: $this->getString($worksheet, $row, self::COLUMN_TYPE),
@@ -429,7 +522,29 @@ class BlueprintExcelReader
             ascensionUpgrades: $this->parseAscension($worksheet, $row),
             transcendenceUpgrades: $this->parseTranscendence($worksheet, $row),
             components: $this->parseComponents($worksheet, $row),
+            elementalAffinityRaw: $elementalAffinityRaw,
+            elementalAffinities: $this->parseElementalAffinities($elementalAffinityRaw),
+            spiritAffinityName: $this->getString($worksheet, $row, self::COLUMN_SPIRIT_AFFINITY),
+            builtInElementName: $this->getString($worksheet, $row, self::COLUMN_BUILT_IN_ELEMENT),
+            builtInSpiritName: $this->getString($worksheet, $row, self::COLUMN_BUILT_IN_SPIRIT),
         );
+    }
+
+    /**
+     * Divide el valor de Elemental Affinity preservando el orden original de la celda.
+     * El primer elemento mantiene la prioridad 1 y el segundo la prioridad 2.
+     *
+     * @return array<int, string>
+     */
+    private function parseElementalAffinities(?string $raw): array
+    {
+        if ($raw === null) {
+            return [];
+        }
+
+        $tokens = array_map('trim', explode(',', $raw));
+
+        return array_values(array_filter($tokens, fn (string $token) => $token !== ''));
     }
 
     private function parseComponents(Worksheet $worksheet, int $row): array
