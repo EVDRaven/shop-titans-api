@@ -104,11 +104,6 @@ class Blueprint extends Model
         return $this->hasMany(BlueprintComponent::class, 'blueprint_id');
     }
 
-    public function blueprintComponentsAsComponent(): HasMany
-    {
-        return $this->hasMany(BlueprintComponent::class, 'component_id');
-    }
-
     public function craftingUpgrades(): HasMany
     {
         return $this->hasMany(BlueprintCraftingUpgrade::class);

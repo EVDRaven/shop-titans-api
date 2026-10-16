@@ -28,7 +28,7 @@ class BlueprintComponent extends Model
 
     public function component(): BelongsTo
     {
-        return $this->belongsTo(Blueprint::class, 'component_id');
+        return $this->belongsTo(CraftingMaterial::class, 'component_id');
     }
 
     public function quality(): BelongsTo

@@ -1,0 +1,75 @@
+<?php
+
+namespace App\Imports;
+
+class BlueprintRowData
+{
+    public function __construct(
+        public readonly string $name,
+        public readonly ?string $categoryName,
+        public readonly ?string $unlockPrerequisite,
+        public readonly ?int $researchScrolls,
+        public readonly ?int $antiqueTokens,
+        public readonly int $tier,
+        public readonly int $goldValue,
+        public readonly int $craftTimeSeconds,
+        public readonly ?string $craftTimeFormatted,
+        public readonly ?float $valuePerSecond,
+        public readonly int $merchantXp,
+        public readonly ?float $merchantXpPerSecond,
+        public readonly int $workerXp,
+        public readonly int $fusionXp,
+        public readonly int $favor,
+        public readonly int $airshipPower,
+        public readonly ?int $atk,
+        public readonly ?int $def,
+        public readonly ?int $hp,
+        public readonly ?int $eva,
+        public readonly ?int $crit,
+        public readonly ?int $manaShield,
+        public readonly ?int $discountEnergy,
+        public readonly ?int $surchargeEnergy,
+        public readonly ?int $suggestEnergy,
+        public readonly ?int $speedUpEnergy,
+        public readonly ?string $availableAsAntiqueAt,
+        public readonly array $workers,
+        public readonly array $resources,
+        public readonly array $craftingUpgrades,
+        public readonly array $starforgedMilestones,
+        public readonly array $ascensionUpgrades,
+        public readonly array $transcendenceUpgrades,
+        public readonly array $components = [],
+    ) {}
+
+    public function toBlueprintAttributes(): array
+    {
+        return [
+            'name' => $this->name,
+            'unlock_prerequisite' => $this->unlockPrerequisite,
+            'research_scrolls' => $this->researchScrolls,
+            'antique_tokens' => $this->antiqueTokens,
+            'tier' => $this->tier,
+            'gold_value' => $this->goldValue,
+            'craft_time_seconds' => $this->craftTimeSeconds,
+            'craft_time_formatted' => $this->craftTimeFormatted,
+            'value_per_second' => $this->valuePerSecond,
+            'merchant_xp' => $this->merchantXp,
+            'merchant_xp_per_second' => $this->merchantXpPerSecond,
+            'worker_xp' => $this->workerXp,
+            'fusion_xp' => $this->fusionXp,
+            'favor' => $this->favor,
+            'airship_power' => $this->airshipPower,
+            'atk' => $this->atk,
+            'def' => $this->def,
+            'hp' => $this->hp,
+            'eva' => $this->eva,
+            'crit' => $this->crit,
+            'mana_shield' => $this->manaShield,
+            'discount_energy' => $this->discountEnergy ?? 0,
+            'surcharge_energy' => $this->surchargeEnergy ?? 0,
+            'suggest_energy' => $this->suggestEnergy ?? 0,
+            'speed_up_energy' => $this->speedUpEnergy ?? 0,
+            'available_as_antique_at' => $this->availableAsAntiqueAt,
+        ];
+    }
+}
