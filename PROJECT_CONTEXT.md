@@ -28,7 +28,7 @@ Que funcione, sea entendible, mantenible y escalable, evitando sobrearquitectura
 - Docker Compose operativo.
 - Laravel → PostgreSQL validado.
 - MVP Blueprints: 14 migraciones ejecutadas y PostgreSQL validado.
-- Seeders, BlueprintImporter y API aún no implementados.
+- Seeders de catálogos del MVP, importadores (`import:blueprints`, `import:blueprint-components`) y API pública `/api/v1` de Blueprints: implementados.
 
 ## MVP Blueprints
 Catálogos:
@@ -51,7 +51,7 @@ Relaciones:
 - blueprint_ascension_upgrades
 - blueprint_transcendence_upgrades
 
-`blueprint_components.component_id` → `blueprints.id` como FK recursiva.
+`blueprint_components.component_id` → `crafting_materials.id` (FK, `restrictOnDelete`); antes apuntaba a `blueprints.id` (migración `2026_10_14_000002`).
 
 `blueprints.unlock_prerequisite` → varchar(255) nullable, sin FK hacia workers.
 
@@ -64,6 +64,11 @@ Skills y Enchantments quedan fuera del MVP.
 - Sin índices secundarios hasta conocer consultas reales.
 - `blueprint_components.component_id` → RESTRICT.
 - `resources.column_letter_in_excel` → UNIQUE.
+
+### Aislamiento de pruebas y protección de PostgreSQL (aprobado 2026-10-23)
+- **P-1:** se conserva el bloque `<server>` de `src/phpunit.xml`.
+- **P-2:** el aislamiento de PHPUnit depende de `force="true"` en `<env>` **junto con** el bloque `<server>`; **no** depende del flag `--env=testing` por sí solo.
+- **P-3:** guarda contra comandos destructivos: `migrate:fresh`, `migrate:refresh` y `db:wipe` se bloquean (exit code 1) cuando la conexión efectiva resuelve a driver `pgsql` y base `shoptitans` (`App\Console\DestructiveCommandGuard`, registrada como listener de `CommandStarting` en `AppServiceProvider`).
 
 ## Reglas
 Una hipótesis sobre datos externos debe verificarse contra datos reales antes de convertirse en FK, enum, restricción, clasificación, relación o lógica de importación.

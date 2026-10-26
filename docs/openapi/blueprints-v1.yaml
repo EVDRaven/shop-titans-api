@@ -1,0 +1,1225 @@
+openapi: 3.0.3
+
+info:
+  title: Shop Titans API — Blueprints
+  version: 1.0.0
+  description: |
+    Contrato de la API pública de **solo lectura** del módulo Blueprints (MVP).
+
+    ESTADO: **CONTRATO APROBADO (decisiones D-1..D-8 cerradas) e IMPLEMENTADO.** Los
+    endpoints `GET /api/v1/blueprints` y `GET /api/v1/blueprints/{id}` están
+    implementados en el código (Etapa 2); este documento es el contrato vigente.
+
+    Alcance del MVP (decisiones aprobadas):
+    - Prefijo versionado `/api/v1`.
+    - API pública, de solo lectura, **sin autenticación** inicialmente.
+    - Únicamente dos endpoints: `GET /api/v1/blueprints` y `GET /api/v1/blueprints/{id}`.
+    - Listado paginado con filtros combinables y ordenamiento por lista permitida.
+    - Respuesta JSON uniforme: listados con `data`, `meta` y `links`; detalle con `data`.
+    - Claves JSON y nombres de `include` en **snake_case** (D-1/D-2).
+    - Estadísticas agrupadas en `stats` y energías en `energies` (D-3).
+    - `include` es una **lista separada por comas** (`include=a,b,c`), no un valor único.
+    - Filtros con operadores explícitos (D-6): `filter[campo]` equivale a
+      `filter[campo][eq]`; los campos numéricos aceptan además `filter[campo][gt]`,
+      `filter[campo][gte]`, `filter[campo][lt]` y `filter[campo][lte]`.
+    - Los valores decimales se serializan como **números** JSON, no como cadenas;
+      los enteros como **números** enteros (D-8).
+    - Sin dependencias nuevas ni índices nuevos en esta etapa.
+
+    Tipos y nulabilidad verificados contra el código real (modelos y migraciones
+    `2026_08_28_100001..100014`, `2026_10_14_000001..000002`, `2026_10_16_000001..000005`).
+
+  contact:
+    name: Editor IA
+  license:
+    name: Uso interno
+
+servers:
+  - url: /api/v1
+    description: Prefijo versionado relativo al host de la aplicación.
+
+tags:
+  - name: Blueprints
+    description: Consulta de blueprints y sus relaciones.
+
+x-approved-decisions:
+  - id: D-1
+    status: APROBADA
+    detail: Claves JSON en snake_case en todas las respuestas.
+  - id: D-2
+    status: APROBADA
+    detail: >-
+      Nombres de `include` en snake_case: workers, resources, components,
+      elemental_affinities, spirit_affinity, built_in_element, built_in_spirit,
+      crafting_upgrades, starforged_milestones, ascension_upgrades, transcendence_upgrades.
+  - id: D-3
+    status: APROBADA
+    detail: >-
+      Estadísticas agrupadas en `stats` (atk, def, hp, eva, crit, mana_shield) y energías
+      en `energies` (discount, surcharge, suggest, speed_up).
+  - id: D-4
+    status: APROBADA
+    detail: >-
+      Se exponen los campos derivados `craft_time_formatted`, `value_per_second` y
+      `merchant_xp_per_second`.
+  - id: D-5
+    status: APROBADA
+    detail: per_page por defecto 25 y máximo 100.
+  - id: D-6
+    status: APROBADA
+    detail: >-
+      Sintaxis `filter[campo][op]` con operadores `eq`, `gt`, `gte`, `lt`, `lte`; búsqueda
+      parcial (contiene, sin distinguir mayúsculas) para campos de texto.
+  - id: D-7
+    status: APROBADA
+    detail: >-
+      Se excluyen de la respuesta `raw_value`, los `id` de tablas pivote y los timestamps
+      internos de auditoría (`created_at`/`updated_at`).
+  - id: D-8
+    status: APROBADA
+    detail: >-
+      Se garantizan los tipos en la presentación JSON: enteros como número entero y
+      decimales (`value_per_second`, `merchant_xp_per_second`) como número de punto flotante.
+
+paths:
+  /blueprints:
+    get:
+      tags: [Blueprints]
+      operationId: listBlueprints
+      summary: Lista paginada de blueprints
+      description: |
+        Devuelve blueprints paginados. Filtros y ordenamiento combinables sobre columnas
+        y relaciones reales. La relación `category` se incluye por defecto; el resto
+        mediante el parámetro `include` (lista separada por comas).
+
+        **Sintaxis de filtros (D-6):** `filter[campo]=valor` aplica igualdad exacta y
+        equivale a `filter[campo][eq]=valor`. Los campos numéricos admiten además los
+        operadores explícitos `filter[campo][gt]`, `filter[campo][gte]`,
+        `filter[campo][lt]` y `filter[campo][lte]`. Los campos de texto (`name`,
+        `unlock_prerequisite`) usan búsqueda **parcial** (contiene, sin distinguir
+        mayúsculas). Los operadores aplicables a cada campo se declaran en cada
+        parámetro de este endpoint.
+
+        **Ejemplo de solicitud (exacto):**
+
+        ```text
+        GET /api/v1/blueprints?page=1&per_page=25&sort=-gold_value&include=workers,components&filter[tier][gte]=3&filter[gold_value][lte]=1000&filter[name]=squire
+        ```
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - $ref: '#/components/parameters/Sort'
+        - $ref: '#/components/parameters/Include'
+        # Texto (búsqueda parcial)
+        - $ref: '#/components/parameters/FilterName'
+        - $ref: '#/components/parameters/FilterUnlockPrerequisite'
+        # Catálogos y texto (igualdad exacta)
+        - $ref: '#/components/parameters/FilterCategory'
+        - $ref: '#/components/parameters/FilterCategoryId'
+        - $ref: '#/components/parameters/FilterElement'
+        - $ref: '#/components/parameters/FilterSpiritAffinity'
+        - $ref: '#/components/parameters/FilterBuiltInElement'
+        - $ref: '#/components/parameters/FilterBuiltInSpirit'
+        - $ref: '#/components/parameters/FilterResource'
+        - $ref: '#/components/parameters/FilterComponent'
+        - $ref: '#/components/parameters/FilterWorker'
+        - $ref: '#/components/parameters/FilterAvailableAsAntique'
+        # Numéricos: eq (base) + gt/gte/lt/lte explícitos
+        - $ref: '#/components/parameters/FilterTier'
+        - $ref: '#/components/parameters/FilterTierGt'
+        - $ref: '#/components/parameters/FilterTierGte'
+        - $ref: '#/components/parameters/FilterTierLt'
+        - $ref: '#/components/parameters/FilterTierLte'
+        - $ref: '#/components/parameters/FilterGoldValue'
+        - $ref: '#/components/parameters/FilterGoldValueGt'
+        - $ref: '#/components/parameters/FilterGoldValueGte'
+        - $ref: '#/components/parameters/FilterGoldValueLt'
+        - $ref: '#/components/parameters/FilterGoldValueLte'
+        - $ref: '#/components/parameters/FilterCraftTimeSeconds'
+        - $ref: '#/components/parameters/FilterCraftTimeSecondsGt'
+        - $ref: '#/components/parameters/FilterCraftTimeSecondsGte'
+        - $ref: '#/components/parameters/FilterCraftTimeSecondsLt'
+        - $ref: '#/components/parameters/FilterCraftTimeSecondsLte'
+        - $ref: '#/components/parameters/FilterMerchantXp'
+        - $ref: '#/components/parameters/FilterMerchantXpGt'
+        - $ref: '#/components/parameters/FilterMerchantXpGte'
+        - $ref: '#/components/parameters/FilterMerchantXpLt'
+        - $ref: '#/components/parameters/FilterMerchantXpLte'
+        - $ref: '#/components/parameters/FilterAirshipPower'
+        - $ref: '#/components/parameters/FilterAirshipPowerGt'
+        - $ref: '#/components/parameters/FilterAirshipPowerGte'
+        - $ref: '#/components/parameters/FilterAirshipPowerLt'
+        - $ref: '#/components/parameters/FilterAirshipPowerLte'
+      responses:
+        '200':
+          description: >-
+            Listado paginado de blueprints. El host de `links` es absoluto y depende
+            de la petición; en el ejemplo se ilustra con `https://example.com`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlueprintListResponse'
+              example:
+                data:
+                  - id: 59
+                    name: Squire Sword
+                    category:
+                      id: 536
+                      name: Sword
+                    unlock_prerequisite: Blacksmith
+                    research_scrolls: null
+                    antique_tokens: null
+                    tier: 1
+                    gold_value: 50
+                    craft_time_seconds: 15
+                    craft_time_formatted: '00:00:15'
+                    value_per_second: 3.33
+                    merchant_xp: 135
+                    merchant_xp_per_second: 9
+                    worker_xp: 2
+                    fusion_xp: 10
+                    favor: 1
+                    airship_power: 13
+                    stats:
+                      atk: 16
+                      def: null
+                      hp: null
+                      eva: null
+                      crit: null
+                      mana_shield: null
+                    energies:
+                      discount: 5
+                      surcharge: 15
+                      suggest: 5
+                      speed_up: 15
+                    available_as_antique_at: null
+                meta:
+                  current_page: 1
+                  per_page: 1
+                  total: 1549
+                  last_page: 1549
+                  from: 1
+                  to: 1
+                links:
+                  first: 'https://example.com/api/v1/blueprints?page=1'
+                  last: 'https://example.com/api/v1/blueprints?page=1549'
+                  prev: null
+                  next: 'https://example.com/api/v1/blueprints?page=2'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /blueprints/{id}:
+    get:
+      tags: [Blueprints]
+      operationId: getBlueprint
+      summary: Detalle de un blueprint por ID
+      description: |
+        Devuelve un único blueprint. La relación `category` se incluye por defecto; el
+        resto mediante `include`. Devuelve 404 si el ID no existe.
+      parameters:
+        - $ref: '#/components/parameters/BlueprintId'
+        - $ref: '#/components/parameters/Include'
+      responses:
+        '200':
+          description: Blueprint encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlueprintResponse'
+              example:
+                data:
+                  id: 59
+                  name: Squire Sword
+                  category:
+                    id: 536
+                    name: Sword
+                  unlock_prerequisite: Blacksmith
+                  research_scrolls: null
+                  antique_tokens: null
+                  tier: 1
+                  gold_value: 50
+                  craft_time_seconds: 15
+                  craft_time_formatted: '00:00:15'
+                  value_per_second: 3.33
+                  merchant_xp: 135
+                  merchant_xp_per_second: 9
+                  worker_xp: 2
+                  fusion_xp: 10
+                  favor: 1
+                  airship_power: 13
+                  stats:
+                    atk: 16
+                    def: null
+                    hp: null
+                    eva: null
+                    crit: null
+                    mana_shield: null
+                  energies:
+                    discount: 5
+                    surcharge: 15
+                    suggest: 5
+                    speed_up: 15
+                  available_as_antique_at: null
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+components:
+  parameters:
+    BlueprintId:
+      name: id
+      in: path
+      required: true
+      description: Identificador interno del blueprint (entero positivo).
+      schema:
+        type: integer
+        minimum: 1
+      example: 59
+
+    Page:
+      name: page
+      in: query
+      required: false
+      description: Número de página (1-indexado).
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    PerPage:
+      name: per_page
+      in: query
+      required: false
+      description: Tamaño de página. Por defecto 25, máximo 100 (D-5).
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+
+    Sort:
+      name: sort
+      in: query
+      required: false
+      description: |
+        Campo de ordenamiento. Prefijo `-` para descendente. Lista permitida:
+        `id`, `name`, `tier`, `gold_value`, `craft_time_seconds`, `merchant_xp`,
+        `airship_power`. Por defecto `id` ascendente.
+      schema:
+        type: string
+      example: -gold_value
+
+    Include:
+      name: include
+      in: query
+      required: false
+      description: |
+        Relaciones a incluir, expresadas como **lista separada por comas**
+        (`include=a,b,c`; `style: form`, `explode: false`). La whitelist aplica a cada
+        elemento de la lista. Relaciones permitidas: `workers`, `resources`,
+        `components`, `elemental_affinities`, `spirit_affinity`, `built_in_element`,
+        `built_in_spirit`, `crafting_upgrades`, `starforged_milestones`,
+        `ascension_upgrades`, `transcendence_upgrades`. `category` se incluye siempre y
+        no requiere `include`.
+      style: form
+      explode: false
+      schema:
+        type: array
+        items:
+          type: string
+          enum:
+            - workers
+            - resources
+            - components
+            - elemental_affinities
+            - spirit_affinity
+            - built_in_element
+            - built_in_spirit
+            - crafting_upgrades
+            - starforged_milestones
+            - ascension_upgrades
+            - transcendence_upgrades
+      example:
+        - workers
+        - resources
+        - components
+        - elemental_affinities
+
+    FilterName:
+      name: filter[name]
+      in: query
+      required: false
+      description: |
+        Búsqueda **parcial** por nombre (contiene, sin distinguir mayúsculas).
+        La variante `filter[name][eq]` también se admite y produce idéntica búsqueda
+        parcial, conforme a D-6 (`filter[campo]` equivale a `filter[campo][eq]`).
+      schema:
+        type: string
+      example: squire
+
+    FilterUnlockPrerequisite:
+      name: filter[unlock_prerequisite]
+      in: query
+      required: false
+      description: |
+        Búsqueda **parcial** por texto de prerrequisito de desbloqueo (contiene).
+        Sin catálogo estructurado. La variante `filter[unlock_prerequisite][eq]`
+        también se admite y produce idéntica búsqueda parcial, conforme a D-6.
+      schema:
+        type: string
+      example: Blacksmith
+
+    FilterCategory:
+      name: filter[category]
+      in: query
+      required: false
+      description: Nombre exacto de la categoría (relación `category.name`, operador `eq`).
+      schema:
+        type: string
+      example: Sword
+
+    FilterCategoryId:
+      name: filter[category_id]
+      in: query
+      required: false
+      description: |
+        ID exacto de la categoría (operador `eq`). Debe ser un entero positivo:
+        valores `0` o negativos producen `422` (consistente con `BlueprintId` y
+        `filter[tier]`).
+      schema:
+        type: integer
+        minimum: 1
+      example: 1
+
+    FilterTier:
+      name: filter[tier]
+      in: query
+      required: false
+      description: |
+        Filtra por `tier` con **igualdad exacta** (`eq`; equivale a
+        `filter[tier][eq]`). Para rangos use `filter[tier][gt]`, `filter[tier][gte]`,
+        `filter[tier][lt]` o `filter[tier][lte]`.
+      schema:
+        type: integer
+        minimum: 1
+      example: 1
+
+    FilterTierGt:
+      name: filter[tier][gt]
+      in: query
+      required: false
+      description: "`tier` mayor que el valor indicado (`gt`)."
+      schema:
+        type: integer
+        minimum: 1
+      example: 3
+
+    FilterTierGte:
+      name: filter[tier][gte]
+      in: query
+      required: false
+      description: "`tier` mayor o igual que el valor indicado (`gte`)."
+      schema:
+        type: integer
+        minimum: 1
+      example: 3
+
+    FilterTierLt:
+      name: filter[tier][lt]
+      in: query
+      required: false
+      description: "`tier` menor que el valor indicado (`lt`)."
+      schema:
+        type: integer
+        minimum: 1
+      example: 5
+
+    FilterTierLte:
+      name: filter[tier][lte]
+      in: query
+      required: false
+      description: "`tier` menor o igual que el valor indicado (`lte`)."
+      schema:
+        type: integer
+        minimum: 1
+      example: 5
+
+    FilterGoldValue:
+      name: filter[gold_value]
+      in: query
+      required: false
+      description: |
+        Filtra por `gold_value` con **igualdad exacta** (`eq`; equivale a
+        `filter[gold_value][eq]`). Para rangos use `filter[gold_value][gt]`,
+        `filter[gold_value][gte]`, `filter[gold_value][lt]` o `filter[gold_value][lte]`.
+      schema:
+        type: integer
+        minimum: 0
+      example: 100
+
+    FilterGoldValueGt:
+      name: filter[gold_value][gt]
+      in: query
+      required: false
+      description: "`gold_value` mayor que el valor indicado (`gt`)."
+      schema:
+        type: integer
+        minimum: 0
+      example: 100
+
+    FilterGoldValueGte:
+      name: filter[gold_value][gte]
+      in: query
+      required: false
+      description: "`gold_value` mayor o igual que el valor indicado (`gte`)."
+      schema:
+        type: integer
+        minimum: 0
+      example: 100
+
+    FilterGoldValueLt:
+      name: filter[gold_value][lt]
+      in: query
+      required: false
+      description: "`gold_value` menor que el valor indicado (`lt`)."
+      schema:
+        type: integer
+        minimum: 0
+      example: 1000
+
+    FilterGoldValueLte:
+      name: filter[gold_value][lte]
+      in: query
+      required: false
+      description: "`gold_value` menor o igual que el valor indicado (`lte`)."
+      schema:
+        type: integer
+        minimum: 0
+      example: 1000
+
+    FilterCraftTimeSeconds:
+      name: filter[craft_time_seconds]
+      in: query
+      required: false
+      description: |
+        Filtra por `craft_time_seconds` con **igualdad exacta** (`eq`; equivale a
+        `filter[craft_time_seconds][eq]`). Para rangos use
+        `filter[craft_time_seconds][gt]`, `filter[craft_time_seconds][gte]`,
+        `filter[craft_time_seconds][lt]` o `filter[craft_time_seconds][lte]`.
+      schema:
+        type: integer
+        minimum: 0
+      example: 60
+
+    FilterCraftTimeSecondsGt:
+      name: filter[craft_time_seconds][gt]
+      in: query
+      required: false
+      description: "`craft_time_seconds` mayor que el valor indicado (`gt`)."
+      schema:
+        type: integer
+        minimum: 0
+      example: 60
+
+    FilterCraftTimeSecondsGte:
+      name: filter[craft_time_seconds][gte]
+      in: query
+      required: false
+      description: "`craft_time_seconds` mayor o igual que el valor indicado (`gte`)."
+      schema:
+        type: integer
+        minimum: 0
+      example: 60
+
+    FilterCraftTimeSecondsLt:
+      name: filter[craft_time_seconds][lt]
+      in: query
+      required: false
+      description: "`craft_time_seconds` menor que el valor indicado (`lt`)."
+      schema:
+        type: integer
+        minimum: 0
+      example: 600
+
+    FilterCraftTimeSecondsLte:
+      name: filter[craft_time_seconds][lte]
+      in: query
+      required: false
+      description: "`craft_time_seconds` menor o igual que el valor indicado (`lte`)."
+      schema:
+        type: integer
+        minimum: 0
+      example: 600
+
+    FilterMerchantXp:
+      name: filter[merchant_xp]
+      in: query
+      required: false
+      description: |
+        Filtra por `merchant_xp` con **igualdad exacta** (`eq`; equivale a
+        `filter[merchant_xp][eq]`). Para rangos use `filter[merchant_xp][gt]`,
+        `filter[merchant_xp][gte]`, `filter[merchant_xp][lt]` o `filter[merchant_xp][lte]`.
+      schema:
+        type: integer
+        minimum: 0
+      example: 100
+
+    FilterMerchantXpGt:
+      name: filter[merchant_xp][gt]
+      in: query
+      required: false
+      description: "`merchant_xp` mayor que el valor indicado (`gt`)."
+      schema:
+        type: integer
+        minimum: 0
+      example: 100
+
+    FilterMerchantXpGte:
+      name: filter[merchant_xp][gte]
+      in: query
+      required: false
+      description: "`merchant_xp` mayor o igual que el valor indicado (`gte`)."
+      schema:
+        type: integer
+        minimum: 0
+      example: 100
+
+    FilterMerchantXpLt:
+      name: filter[merchant_xp][lt]
+      in: query
+      required: false
+      description: "`merchant_xp` menor que el valor indicado (`lt`)."
+      schema:
+        type: integer
+        minimum: 0
+      example: 1000
+
+    FilterMerchantXpLte:
+      name: filter[merchant_xp][lte]
+      in: query
+      required: false
+      description: "`merchant_xp` menor o igual que el valor indicado (`lte`)."
+      schema:
+        type: integer
+        minimum: 0
+      example: 1000
+
+    FilterAirshipPower:
+      name: filter[airship_power]
+      in: query
+      required: false
+      description: |
+        Filtra por `airship_power` con **igualdad exacta** (`eq`; equivale a
+        `filter[airship_power][eq]`). Para rangos use `filter[airship_power][gt]`,
+        `filter[airship_power][gte]`, `filter[airship_power][lt]` o
+        `filter[airship_power][lte]`.
+      schema:
+        type: integer
+        minimum: 0
+      example: 100
+
+    FilterAirshipPowerGt:
+      name: filter[airship_power][gt]
+      in: query
+      required: false
+      description: "`airship_power` mayor que el valor indicado (`gt`)."
+      schema:
+        type: integer
+        minimum: 0
+      example: 100
+
+    FilterAirshipPowerGte:
+      name: filter[airship_power][gte]
+      in: query
+      required: false
+      description: "`airship_power` mayor o igual que el valor indicado (`gte`)."
+      schema:
+        type: integer
+        minimum: 0
+      example: 100
+
+    FilterAirshipPowerLt:
+      name: filter[airship_power][lt]
+      in: query
+      required: false
+      description: "`airship_power` menor que el valor indicado (`lt`)."
+      schema:
+        type: integer
+        minimum: 0
+      example: 1000
+
+    FilterAirshipPowerLte:
+      name: filter[airship_power][lte]
+      in: query
+      required: false
+      description: "`airship_power` menor o igual que el valor indicado (`lte`)."
+      schema:
+        type: integer
+        minimum: 0
+      example: 1000
+
+    FilterElement:
+      name: filter[element]
+      in: query
+      required: false
+      description: Nombre exacto de un elemento con afinidad AZ, cualquier posición (operador `eq`).
+      schema:
+        type: string
+      example: Dark
+
+    FilterSpiritAffinity:
+      name: filter[spirit_affinity]
+      in: query
+      required: false
+      description: Nombre exacto de la afinidad de espíritu, columna BA (operador `eq`).
+      schema:
+        type: string
+
+    FilterBuiltInElement:
+      name: filter[built_in_element]
+      in: query
+      required: false
+      description: Nombre exacto del elemento incorporado, columna BB, catálogo `enchantments` (operador `eq`).
+      schema:
+        type: string
+
+    FilterBuiltInSpirit:
+      name: filter[built_in_spirit]
+      in: query
+      required: false
+      description: Nombre exacto del espíritu incorporado, columna BC (operador `eq`).
+      schema:
+        type: string
+
+    FilterResource:
+      name: filter[resource]
+      in: query
+      required: false
+      description: Nombre exacto de un recurso requerido por el blueprint (operador `eq`).
+      schema:
+        type: string
+      example: Iron
+
+    FilterComponent:
+      name: filter[component]
+      in: query
+      required: false
+      description: |
+        Nombre **exacto** de un material componente requerido por el blueprint
+        (relación `blueprint_components.component.name`, operador `eq`). La variante
+        `filter[component][eq]` es equivalente, conforme a D-6. La búsqueda recorre
+        **todos los tipos** de `crafting_materials` (`blueprint`, `quest_component`,
+        `sigil`, `enchantment`) sin acotar por `material_type` (DP-D); por ello, si
+        existen materiales homónimos de distinto tipo, la coincidencia puede ser
+        ambigua. La comparación respeta mayúsculas y minúsculas (igualdad de base de
+        datos). El valor debe ser no vacío.
+      schema:
+        type: string
+      example: Ruby
+
+    FilterWorker:
+      name: filter[worker]
+      in: query
+      required: false
+      description: Clave de trabajador (`worker_key`) que puede fabricar el blueprint (operador `eq`).
+      schema:
+        type: string
+      example: Blacksmith
+
+    FilterAvailableAsAntique:
+      name: filter[available_as_antique]
+      in: query
+      required: false
+      description: |
+        Filtra por disponibilidad como antigüedad (operador `eq`). Valores admitidos
+        y su equivalencia semántica:
+        - `true` o `1`: solo blueprints con `available_as_antique_at` no nulo.
+        - `false` o `0`: solo blueprints con `available_as_antique_at` nulo.
+        Cualquier otro valor produce `422`.
+      schema:
+        type: string
+        enum: ['true', 'false', '1', '0']
+      example: 'true'
+
+  schemas:
+    Blueprint:
+      type: object
+      description: |
+        Recurso Blueprint. Las relaciones (`workers`, `resources`, `components`,
+        `elemental_affinities`, `spirit_affinity`, `built_in_element`, `built_in_spirit`,
+        `crafting_upgrades`, `starforged_milestones`, `ascension_upgrades`,
+        `transcendence_upgrades`) aparecen solo si se solicitan con `include`.
+        `category` aparece siempre (puede ser `null`).
+      required:
+        - id
+        - name
+        - tier
+        - gold_value
+        - craft_time_seconds
+        - merchant_xp
+        - worker_xp
+        - fusion_xp
+        - favor
+        - airship_power
+        - stats
+        - energies
+        - category
+      properties:
+        id:
+          type: integer
+          example: 59
+        name:
+          type: string
+          example: Squire Sword
+        category:
+          allOf:
+            - $ref: '#/components/schemas/Category'
+          nullable: true
+        unlock_prerequisite:
+          type: string
+          nullable: true
+          example: null
+        research_scrolls:
+          type: integer
+          nullable: true
+        antique_tokens:
+          type: integer
+          nullable: true
+        tier:
+          type: integer
+          example: 1
+        gold_value:
+          type: integer
+          example: 50
+        craft_time_seconds:
+          type: integer
+          example: 15
+        craft_time_formatted:
+          type: string
+          nullable: true
+          description: "Derivado (D-4, expuesto). Formateo legible de craft_time_seconds."
+          example: '00:00:15'
+        value_per_second:
+          type: number
+          format: float
+          nullable: true
+          description: "Derivado (D-4, expuesto). gold_value / craft_time_seconds."
+          example: 3.33
+        merchant_xp:
+          type: integer
+          example: 135
+        merchant_xp_per_second:
+          type: number
+          format: float
+          nullable: true
+          description: "Derivado (D-4, expuesto). merchant_xp / craft_time_seconds."
+          example: 9
+        worker_xp:
+          type: integer
+        fusion_xp:
+          type: integer
+        favor:
+          type: integer
+        airship_power:
+          type: integer
+        stats:
+          $ref: '#/components/schemas/BlueprintStats'
+        energies:
+          $ref: '#/components/schemas/BlueprintEnergies'
+        available_as_antique_at:
+          type: string
+          format: date-time
+          nullable: true
+        workers:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlueprintWorker'
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlueprintResource'
+        components:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlueprintComponent'
+        elemental_affinities:
+          type: array
+          description: Afinidades AZ ordenadas por `position` (1 = prioritario).
+          items:
+            $ref: '#/components/schemas/BlueprintElementalAffinity'
+        spirit_affinity:
+          allOf:
+            - $ref: '#/components/schemas/SpiritAffinity'
+          nullable: true
+        built_in_element:
+          allOf:
+            - $ref: '#/components/schemas/Enchantment'
+          nullable: true
+        built_in_spirit:
+          allOf:
+            - $ref: '#/components/schemas/Spirit'
+          nullable: true
+        crafting_upgrades:
+          type: array
+          items:
+            $ref: '#/components/schemas/CraftingUpgrade'
+        starforged_milestones:
+          type: array
+          items:
+            $ref: '#/components/schemas/StarforgedMilestone'
+        ascension_upgrades:
+          type: array
+          items:
+            $ref: '#/components/schemas/AscensionUpgrade'
+        transcendence_upgrades:
+          type: array
+          items:
+            $ref: '#/components/schemas/TranscendenceUpgrade'
+
+    BlueprintStats:
+      type: object
+      description: Estadísticas del blueprint. `null` cuando no aplica (según la fuente).
+      properties:
+        atk:
+          type: integer
+          nullable: true
+        def:
+          type: integer
+          nullable: true
+        hp:
+          type: integer
+          nullable: true
+        eva:
+          type: integer
+          nullable: true
+        crit:
+          type: integer
+          nullable: true
+        mana_shield:
+          type: integer
+          nullable: true
+
+    BlueprintEnergies:
+      type: object
+      description: Energías del blueprint (0 cuando la fuente no aporta valor).
+      properties:
+        discount:
+          type: integer
+        surcharge:
+          type: integer
+        suggest:
+          type: integer
+        speed_up:
+          type: integer
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          example: Sword
+
+    WorkerRef:
+      type: object
+      properties:
+        id:
+          type: integer
+        worker_key:
+          type: string
+          example: Blacksmith
+        default_person_name:
+          type: string
+
+    BlueprintWorker:
+      type: object
+      properties:
+        worker:
+          $ref: '#/components/schemas/WorkerRef'
+        level_required:
+          type: integer
+
+    ResourceRef:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          example: Iron
+        tier:
+          type: integer
+          nullable: true
+
+    BlueprintResource:
+      type: object
+      properties:
+        resource:
+          $ref: '#/components/schemas/ResourceRef'
+        quantity:
+          type: integer
+
+    CraftingMaterialRef:
+      type: object
+      description: Material de fabricación (`crafting_materials`). Puede ser blueprint, quest_component, sigil o enchantment.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        material_type:
+          type: string
+          enum: [blueprint, quest_component, sigil, enchantment]
+        tier:
+          type: integer
+          nullable: true
+        gold_value:
+          type: integer
+          nullable: true
+        fuse_time_seconds:
+          type: integer
+          nullable: true
+        worker_level_required:
+          type: integer
+          nullable: true
+        worker_xp:
+          type: integer
+          nullable: true
+
+    QualityRef:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        rank:
+          type: integer
+
+    BlueprintComponent:
+      type: object
+      properties:
+        component:
+          $ref: '#/components/schemas/CraftingMaterialRef'
+        quality:
+          allOf:
+            - $ref: '#/components/schemas/QualityRef'
+          nullable: true
+        amount:
+          type: integer
+
+    ElementRef:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          example: Dark
+
+    BlueprintElementalAffinity:
+      type: object
+      properties:
+        position:
+          type: integer
+          enum: [1, 2]
+          description: Posición original en la celda AZ (1 = prioritario).
+        element:
+          $ref: '#/components/schemas/ElementRef'
+
+    SpiritAffinity:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
+    Enchantment:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+          enum: [Element, Spirit]
+
+    Spirit:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
+    CraftingUpgrade:
+      type: object
+      properties:
+        upgrade_level:
+          type: integer
+        name:
+          type: string
+          nullable: true
+        crafts_required:
+          type: integer
+
+    StarforgedMilestone:
+      type: object
+      properties:
+        milestone_number:
+          type: integer
+        name:
+          type: string
+          nullable: true
+        crafts_required:
+          type: integer
+
+    AscensionUpgrade:
+      type: object
+      properties:
+        upgrade_level:
+          type: integer
+        name:
+          type: string
+          nullable: true
+        shards_required:
+          type: integer
+
+    TranscendenceUpgrade:
+      type: object
+      properties:
+        upgrade_level:
+          type: integer
+        name:
+          type: string
+          nullable: true
+        seals_required:
+          type: integer
+
+    PaginationMeta:
+      type: object
+      properties:
+        current_page:
+          type: integer
+        per_page:
+          type: integer
+        total:
+          type: integer
+        last_page:
+          type: integer
+        from:
+          type: integer
+          nullable: true
+        to:
+          type: integer
+          nullable: true
+
+    PaginationLinks:
+      type: object
+      properties:
+        first:
+          type: string
+          format: uri
+          nullable: true
+        last:
+          type: string
+          format: uri
+          nullable: true
+        prev:
+          type: string
+          format: uri
+          nullable: true
+        next:
+          type: string
+          format: uri
+          nullable: true
+
+    BlueprintListResponse:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Blueprint'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+        links:
+          $ref: '#/components/schemas/PaginationLinks'
+
+    BlueprintResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Blueprint'
+
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+    ValidationErrorResponse:
+      type: object
+      required: [message, errors]
+      properties:
+        message:
+          type: string
+          description: >-
+            Primer mensaje de validación (`ValidationException::summarize()`); no es una
+            frase genérica en Laravel 13.
+          example: "El filtro 'no_existe' no está permitido."
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+
+  responses:
+    NotFound:
+      description: |-
+        El recurso solicitado no existe (HTTP 404), en formato JSON. El mensaje
+        corresponde al comportamiento real de producción (`APP_DEBUG=false`) y expone
+        la clase del modelo no encontrado. Ejemplo derivado del framework (Laravel),
+        no capturado en runtime.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: 'No query results for model [App\Models\Blueprint] 999999'
+    ValidationError:
+      description: >-
+        Parámetros inválidos (HTTP 422). El `message` superior repite el primer mensaje
+        de validación (`ValidationException::summarize()`); el ejemplo proviene de una
+        respuesta real capturada (`filter[no_existe]`).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationErrorResponse'
+          example:
+            message: "El filtro 'no_existe' no está permitido."
+            errors:
+              "filter[no_existe]":
+                - "El filtro 'no_existe' no está permitido."
+    ServerError:
+      description: |-
+        Error interno (HTTP 500). Forma de producción (`APP_DEBUG=false`) verificada en
+        el framework (Laravel); con `APP_DEBUG=true` se añaden claves de diagnóstico.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: Server Error

@@ -5,12 +5,13 @@ namespace Database\Seeders;
 use App\Imports\BlueprintExcelReader;
 use App\Models\Blueprint;
 use App\Models\CraftingMaterial;
+use Database\Seeders\Concerns\ResolvesBlueprintExcelPath;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 
 class CraftingMaterialSeeder extends Seeder
 {
-    public string $filePath;
+    use ResolvesBlueprintExcelPath;
 
     public Collection $warnings;
 
@@ -18,8 +19,8 @@ class CraftingMaterialSeeder extends Seeder
     {
         $this->warnings = collect();
 
-        $filePath = $this->resolveFilePath();
-        $reader = new BlueprintExcelReader;
+        $filePath = $this->resolveBlueprintExcelPath();
+        $reader = app(BlueprintExcelReader::class);
 
         $data = $reader->readCraftingMaterialData($filePath);
         $componentNames = $data['componentNames'];
@@ -102,26 +103,5 @@ class CraftingMaterialSeeder extends Seeder
         if ($this->warnings->isNotEmpty() && $this->command !== null) {
             $this->command->warn("{$this->warnings->count()} advertencia(s) durante la siembra de crafting_materials.");
         }
-    }
-
-    private function resolveFilePath(): string
-    {
-        if (isset($this->filePath)) {
-            return $this->filePath;
-        }
-
-        $default = storage_path('app/Shop Titans Data Spreadsheet _ c_ v26.9.1 _ v1.0.9.1332.xlsx');
-
-        if (file_exists($default)) {
-            return $default;
-        }
-
-        $candidates = glob(storage_path('app/*.xlsx'));
-
-        if (! empty($candidates)) {
-            return $candidates[0];
-        }
-
-        throw new \RuntimeException('No se encontro el archivo Excel de Shop Titans en storage/app/.');
     }
 }
