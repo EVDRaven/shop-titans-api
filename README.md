@@ -45,6 +45,29 @@ Por defecto se busca el archivo `Shop Titans Data Spreadsheet _ c_ v26.9.1 _ v1.
 
 Alcance: este procedimiento prepara el **MVP de Blueprints**; no constituye la instalación completa de todos los datos de la aplicación. Los seeders individuales siguen disponibles para tareas específicas y mantenimiento.
 
+## Acceso HTTP (desarrollo)
+La API queda disponible en `http://127.0.0.1:8000` (accesible únicamente desde el equipo local).
+
+Iniciar el servicio:
+
+```bash
+docker compose up -d app
+```
+
+Comprobar el acceso:
+
+```bash
+curl http://127.0.0.1:8000/api/v1/blueprints
+```
+
+Consultar los registros del contenedor:
+
+```bash
+docker compose logs -f app
+```
+
+`php artisan serve` es un servidor destinado al desarrollo, no a producción.
+
 ## Documentación
 `PROJECT_CONTEXT.md` · `AI_EDITOR_INSTRUCTIONS.md` · `AI_WORK_LOG.md` · `CHANGELOG.md` · `CONTRIBUTING.md` · `docs/reports/` · `docs/adr/`
 
